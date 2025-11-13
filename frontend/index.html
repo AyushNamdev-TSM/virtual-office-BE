@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Real-Time Location Tracking</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+          Helvetica, Arial, sans-serif;
+        display: grid;
+        grid-template-columns: 300px 1fr;
+        gap: 20px;
+        padding: 20px;
+        height: calc(100vh - 40px);
+        background-color: #f0f2f5;
+      }
+      .sidebar {
+        background: #fff;
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+      }
+      .map-container {
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        position: relative;
+        overflow: hidden;
+      }
+      #map {
+        width: 100%;
+        height: 100%;
+        background: #e9ecef;
+        position: relative;
+        cursor: crosshair;
+      }
+      .user-marker {
+        position: absolute;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        border: 2px solid white;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        transform: translate(-50%, -50%);
+        transition:
+          left 0.1s linear,
+          top 0.1s linear;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .user-marker::after {
+        content: attr(data-username);
+        position: absolute;
+        top: 24px;
+        font-size: 12px;
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        padding: 2px 5px;
+        border-radius: 4px;
+        white-space: nowrap;
+      }
+      .form-group {
+        margin-bottom: 15px;
+      }
+      label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 5px;
+      }
+      input {
+        width: calc(100% - 20px);
+        padding: 8px 10px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+      }
+      button {
+        width: 100%;
+        padding: 10px;
+        border: none;
+        border-radius: 4px;
+        color: white;
+        background-color: #007bff;
+        cursor: pointer;
+        font-size: 16px;
+      }
+      button:disabled {
+        background-color: #ccc;
+      }
+      #connectionStatus {
+        padding: 10px;
+        border-radius: 4px;
+        margin-bottom: 15px;
+        text-align: center;
+        font-weight: 600;
+      }
+      .disconnected {
+        background-color: #f8d7da;
+        color: #721c24;
+      }
+      .connected {
+        background-color: #d4edda;
+        color: #155724;
+      }
+      #usersList {
+        margin-top: 15px;
+      }
+      .user-item {
+        font-size: 14px;
+        padding: 5px;
+        background: #f8f9fa;
+        border-radius: 4px;
+        margin-bottom: 5px;
+      }
+      #coordinates {
+        position: absolute;
+        bottom: 10px;
+        left: 10px;
+        background: rgba(0, 0, 0, 0.5);
+        color: white;
+        padding: 5px 10px;
+        border-radius: 4px;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="sidebar">
+      <h2>📍 Location Tracker</h2>
+      <div id="connectionStatus" class="disconnected">Disconnected</div>
+
+      <div class="form-group">
+        <label for="username">Your Name:</label>
+        <input type="text" id="username" />
+      </div>
+
+      <div class="form-group">
+        <label for="roomId">Room ID:</label>
+        <input type="text" id="roomId" value="room-1" />
+      </div>
+
+      <button id="connectBtn" onclick="connectToRoom()">Connect</button>
+
+      <div id="usersList">
+        <h3>Users in Room</h3>
+        <div id="userListContainer"></div>
+      </div>
+    </div>
+
+    <div class="map-container">
+      <div id="map"></div>
+      <div id="coordinates">(0, 0)</div>
+    </div>
+
+    <script>
+      const statusEl = document.getElementById('connectionStatus');
+      const connectBtn = document.getElementById('connectBtn');
+      const usernameInput = document.getElementById('username');
+      const roomIdInput = document.getElementById('roomId');
+      const map = document.getElementById('map');
+      const coordsEl = document.getElementById('coordinates');
+      const userListContainer = document.getElementById('userListContainer');
+
+      let socket = null;
+      let currentUser = null;
+      let userMarkers = new Map(); // Map<userId, markerElement>
+      let isDragging = false;
+
+      // Fix: Generate a random default username
+      usernameInput.value = `User${Math.floor(Math.random() * 1000)}`;
+
+      function setStatus(message, isConnected) {
+        statusEl.textContent = message;
+        statusEl.className = isConnected ? 'connected' : 'disconnected';
+        connectBtn.disabled = isConnected;
+        connectBtn.textContent = isConnected ? 'Connected' : 'Connect';
+        usernameInput.disabled = isConnected;
+        roomIdInput.disabled = isConnected;
+      }
+
+      function connectToRoom() {
+        const username = usernameInput.value.trim();
+        const roomId = roomIdInput.value.trim();
+
+        if (!username || !roomId) {
+          alert('Please enter a username and Room ID');
+          return;
+        }
+
+        currentUser = {
+          id: `user-${Date.now()}`, // Simple unique ID
+          username: username,
+          roomId: roomId,
+        };
+
+        // Connect to the server (running on port 3001)
+        socket = io('http://localhost:3001', {
+          transports: ['websocket', 'polling'],
+        });
+
+        socket.on('connect', () => {
+          console.log('Connected to server!');
+          // Join the room
+          socket.emit('joinRoom', {
+            roomId: currentUser.roomId,
+            userId: currentUser.id,
+            username: currentUser.username,
+          });
+        });
+
+        socket.on('connected', (data) => {
+          console.log(data.message);
+        });
+
+        socket.on('roomJoined', (data) => {
+          console.log('Successfully joined room:', data);
+          setStatus(`Connected to ${data.roomId}`, true);
+          updateUsersList(data.users);
+          // Load initial locations
+          data.locations.forEach(updateUserMarker);
+        });
+
+        socket.on('userJoined', (data) => {
+          console.log('User joined:', data);
+          // Add a new user to the list
+          const existingUser = userListContainer.querySelector(
+            `[data-userid="${data.userId}"]`,
+          );
+          if (!existingUser) {
+            addUserToList(data.userId, data.username);
+          }
+        });
+
+        socket.on('userLeft', (data) => {
+          console.log('User left:', data);
+          removeUserMarker(data.userId);
+          removeUserFromList(data.userId);
+        });
+
+        socket.on('locationUpdate', (data) => {
+          updateUserMarker(data);
+        });
+
+        socket.on('error', (error) => {
+          console.error('Server error:', error);
+          alert(`Error: ${error.message}`);
+        });
+
+        socket.on('disconnect', () => {
+          console.log('Disconnected from server');
+          setStatus('Disconnected', false);
+          userMarkers.forEach((marker) => marker.remove());
+          userMarkers.clear();
+          userListContainer.innerHTML = '';
+        });
+      }
+
+      function updateUserMarker(data) {
+        let marker = userMarkers.get(data.userId);
+
+        if (!marker) {
+          marker = document.createElement('div');
+          marker.className = 'user-marker';
+          marker.setAttribute('data-username', data.username);
+          map.appendChild(marker);
+          userMarkers.set(data.userId, marker);
+
+          // Add to user list if they aren't there
+          if (!userListContainer.querySelector(`[data-userid="${data.userId}"]`)) {
+             addUserToList(data.userId, data.username);
+          }
+        }
+
+        // Set color
+        const color =
+          data.userId === currentUser.id
+            ? '#dc3545' // Current user is red
+            : getColorForUser(data.userId);
+        marker.style.backgroundColor = color;
+
+        // Update position
+        marker.style.left = `${data.x}px`;
+        marker.style.top = `${data.y}px`;
+      }
+
+      function removeUserMarker(userId) {
+        const marker = userMarkers.get(userId);
+        if (marker) {
+          marker.remove();
+          userMarkers.delete(userId);
+        }
+      }
+
+      function updateUsersList(userIds) {
+         userListContainer.innerHTML = '';
+         // Note: This just shows IDs. The 'userJoined' and 'locationUpdate'
+         // events are better for showing usernames.
+      }
+
+      function addUserToList(userId, username) {
+         const userEl = document.createElement('div');
+         userEl.className = 'user-item';
+         userEl.textContent = `${username} (ID: ...${userId.slice(-6)})`;
+         userEl.style.borderLeft = `4px solid ${getColorForUser(userId)}`;
+         userEl.setAttribute('data-userid', userId);
+         userListContainer.appendChild(userEl);
+      }
+
+      function removeUserFromList(userId) {
+         const userEl = userListContainer.querySelector(`[data-userid="${userId}"]`);
+         if (userEl) {
+            userEl.remove();
+         }
+      }
+
+      // --- Map Interaction ---
+
+      function handleMove(e) {
+        if (!socket || !currentUser) return;
+
+        const rect = map.getBoundingClientRect();
+        // Use clientX/Y for mouse, or changedTouches for touch
+        const x = Math.round((e.clientX || e.changedTouches[0].clientX) - rect.left);
+        const y = Math.round((e.clientY || e.changedTouches[0].clientY) - rect.top);
+
+        // Update coordinate display
+        coordsEl.textContent = `(${x}, ${y})`;
+
+        // Send location update
+        socket.emit('updateLocation', {
+          roomId: currentUser.roomId,
+          userId: currentUser.id,
+          username: currentUser.username,
+          x: x,
+          y: y,
+        });
+      }
+
+      // Fix: Add continuous movement (drag)
+      map.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        handleMove(e);
+      });
+      map.addEventListener('mousemove', (e) => {
+        coordsEl.textContent = `(${(e.clientX - map.getBoundingClientRect().left).toFixed(0)}, ${(e.clientY - map.getBoundingClientRect().top).toFixed(0)})`;
+        if (isDragging) {
+          handleMove(e);
+        }
+      });
+      map.addEventListener('mouseup', () => (isDragging = false));
+      map.addEventListener('mouseleave', () => (isDragging = false));
+
+      // Support for mobile touch
+      map.addEventListener('touchstart', (e) => {
+         e.preventDefault();
+         isDragging = true;
+         handleMove(e);
+      });
+      map.addEventListener('touchmove', (e) => {
+         e.preventDefault();
+         if (isDragging) {
+            handleMove(e);
+         }
+      });
+      map.addEventListener('touchend', () => (isDragging = false));
+
+
+      // Simple hash function to get a color for a user ID
+      function getColorForUser(userId) {
+        let hash = 0;
+        for (let i = 0; i < userId.length; i++) {
+          hash = userId.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        const h = hash % 360;
+        return `hsl(${h}, 70%, 50%)`;
+      }
+
+      setStatus('Waiting for connection', false);
+    </script>
+  </body>
+</html>
