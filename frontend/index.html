@@ -15,12 +15,15 @@
         padding: 20px;
         height: calc(100vh - 40px);
         background-color: #f0f2f5;
+        margin: 0;
       }
       .sidebar {
         background: #fff;
         border-radius: 8px;
         padding: 20px;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        display: flex;
+        flex-direction: column;
       }
       .map-container {
         background: #fff;
@@ -35,32 +38,48 @@
         background: #e9ecef;
         position: relative;
         cursor: crosshair;
+        overflow: hidden;
       }
       .user-marker {
         position: absolute;
-        width: 24px;
-        height: 24px;
+        width: 30px;
+        height: 30px;
         border-radius: 50%;
         border: 2px solid white;
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
         transform: translate(-50%, -50%);
-        transition:
-          left 0.1s linear,
-          top 0.1s linear;
+        transition: left 0.1s linear, top 0.1s linear, border-color 0.1s;
         display: flex;
         align-items: center;
         justify-content: center;
+        font-size: 12px;
+        font-weight: bold;
+        color: white;
+        z-index: 1;
+      }
+      /* Collision Animation Class */
+      .collision {
+        border: 3px solid red !important;
+        animation: shake 0.3s;
+      }
+      @keyframes shake {
+        0% { transform: translate(-55%, -50%); }
+        25% { transform: translate(-45%, -50%); }
+        50% { transform: translate(-55%, -50%); }
+        75% { transform: translate(-45%, -50%); }
+        100% { transform: translate(-50%, -50%); }
       }
       .user-marker::after {
         content: attr(data-username);
         position: absolute;
-        top: 24px;
+        top: 32px;
         font-size: 12px;
         background: rgba(0, 0, 0, 0.7);
         color: white;
         padding: 2px 5px;
         border-radius: 4px;
         white-space: nowrap;
+        z-index: 2;
       }
       .form-group {
         margin-bottom: 15px;
@@ -69,12 +88,14 @@
         display: block;
         font-weight: 600;
         margin-bottom: 5px;
+        font-size: 14px;
       }
       input {
-        width: calc(100% - 20px);
+        width: calc(100% - 22px);
         padding: 8px 10px;
         border: 1px solid #ccc;
         border-radius: 4px;
+        font-size: 14px;
       }
       button {
         width: 100%;
@@ -85,9 +106,14 @@
         background-color: #007bff;
         cursor: pointer;
         font-size: 16px;
+        transition: background-color 0.2s;
+      }
+      button:hover {
+        background-color: #0056b3;
       }
       button:disabled {
         background-color: #ccc;
+        cursor: not-allowed;
       }
       #connectionStatus {
         padding: 10px;
@@ -106,10 +132,12 @@
       }
       #usersList {
         margin-top: 15px;
+        flex-grow: 1;
+        overflow-y: auto;
       }
       .user-item {
         font-size: 14px;
-        padding: 5px;
+        padding: 8px 5px;
         background: #f8f9fa;
         border-radius: 4px;
         margin-bottom: 5px;
@@ -123,6 +151,7 @@
         padding: 5px 10px;
         border-radius: 4px;
         font-size: 12px;
+        pointer-events: none;
       }
     </style>
   </head>
@@ -147,6 +176,10 @@
         <h3>Users in Room</h3>
         <div id="userListContainer"></div>
       </div>
+      
+      <div style="margin-top: 10px; font-size: 12px; color: #666;">
+        <p>Try dragging your dot on top of another user to see collision detection!</p>
+      </div>
     </div>
 
     <div class="map-container">
@@ -165,10 +198,9 @@
 
       let socket = null;
       let currentUser = null;
-      let userMarkers = new Map(); // Map<userId, markerElement>
+      let userMarkers = new Map(); 
       let isDragging = false;
 
-      // Fix: Generate a random default username
       usernameInput.value = `User${Math.floor(Math.random() * 1000)}`;
 
       function setStatus(message, isConnected) {
@@ -190,19 +222,17 @@
         }
 
         currentUser = {
-          id: `user-${Date.now()}`, // Simple unique ID
+          id: `user-${Date.now()}`, 
           username: username,
           roomId: roomId,
         };
 
-        // Connect to the server (running on port 3001)
         socket = io('http://localhost:3001', {
           transports: ['websocket', 'polling'],
         });
 
         socket.on('connect', () => {
           console.log('Connected to server!');
-          // Join the room
           socket.emit('joinRoom', {
             roomId: currentUser.roomId,
             userId: currentUser.id,
@@ -217,20 +247,13 @@
         socket.on('roomJoined', (data) => {
           console.log('Successfully joined room:', data);
           setStatus(`Connected to ${data.roomId}`, true);
-          updateUsersList(data.users);
-          // Load initial locations
+          userListContainer.innerHTML = '';
           data.locations.forEach(updateUserMarker);
         });
 
         socket.on('userJoined', (data) => {
           console.log('User joined:', data);
-          // Add a new user to the list
-          const existingUser = userListContainer.querySelector(
-            `[data-userid="${data.userId}"]`,
-          );
-          if (!existingUser) {
-            addUserToList(data.userId, data.username);
-          }
+          addUserToList(data.userId, data.username);
         });
 
         socket.on('userLeft', (data) => {
@@ -242,10 +265,23 @@
         socket.on('locationUpdate', (data) => {
           updateUserMarker(data);
         });
+        
+        // --- LISTENER FOR COLLISION EVENTS ---
+        socket.on('movementRejected', (data) => {
+            console.warn('Movement Rejected:', data);
+            
+            // Visual feedback: Flash the current user's marker red
+            const myMarker = userMarkers.get(currentUser.id);
+            if (myMarker) {
+                myMarker.classList.add('collision');
+                setTimeout(() => {
+                    myMarker.classList.remove('collision');
+                }, 300);
+            }
+        });
 
         socket.on('error', (error) => {
           console.error('Server error:', error);
-          alert(`Error: ${error.message}`);
         });
 
         socket.on('disconnect', () => {
@@ -263,24 +299,20 @@
         if (!marker) {
           marker = document.createElement('div');
           marker.className = 'user-marker';
+          marker.textContent = data.username.charAt(0).toUpperCase();
           marker.setAttribute('data-username', data.username);
           map.appendChild(marker);
           userMarkers.set(data.userId, marker);
-
-          // Add to user list if they aren't there
-          if (!userListContainer.querySelector(`[data-userid="${data.userId}"]`)) {
-             addUserToList(data.userId, data.username);
-          }
+          addUserToList(data.userId, data.username);
         }
 
-        // Set color
         const color =
           data.userId === currentUser.id
-            ? '#dc3545' // Current user is red
+            ? '#dc3545' 
             : getColorForUser(data.userId);
         marker.style.backgroundColor = color;
+        marker.style.borderColor = 'white'; // Reset border
 
-        // Update position
         marker.style.left = `${data.x}px`;
         marker.style.top = `${data.y}px`;
       }
@@ -293,81 +325,79 @@
         }
       }
 
-      function updateUsersList(userIds) {
-         userListContainer.innerHTML = '';
-         // Note: This just shows IDs. The 'userJoined' and 'locationUpdate'
-         // events are better for showing usernames.
-      }
-
       function addUserToList(userId, username) {
-         const userEl = document.createElement('div');
-         userEl.className = 'user-item';
-         userEl.textContent = `${username} (ID: ...${userId.slice(-6)})`;
-         userEl.style.borderLeft = `4px solid ${getColorForUser(userId)}`;
-         userEl.setAttribute('data-userid', userId);
-         userListContainer.appendChild(userEl);
+        if (userListContainer.querySelector(`[data-userid="${userId}"]`)) return;
+        
+        const userEl = document.createElement('div');
+        userEl.className = 'user-item';
+        userEl.textContent = `${username}`;
+        userEl.style.borderLeft = `4px solid ${getColorForUser(userId)}`;
+        userEl.setAttribute('data-userid', userId);
+        userListContainer.appendChild(userEl);
       }
 
       function removeUserFromList(userId) {
-         const userEl = userListContainer.querySelector(`[data-userid="${userId}"]`);
-         if (userEl) {
-            userEl.remove();
-         }
+        const userEl = userListContainer.querySelector(`[data-userid="${userId}"]`);
+        if (userEl) {
+          userEl.remove();
+        }
       }
 
-      // --- Map Interaction ---
-
       function handleMove(e) {
-        if (!socket || !currentUser) return;
+        if (!socket || !currentUser || !isDragging) return;
 
+        e.preventDefault();
         const rect = map.getBoundingClientRect();
-        // Use clientX/Y for mouse, or changedTouches for touch
-        const x = Math.round((e.clientX || e.changedTouches[0].clientX) - rect.left);
-        const y = Math.round((e.clientY || e.changedTouches[0].clientY) - rect.top);
+        // Handle both mouse and touch
+        const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+        const clientY = e.clientY || (e.touches && e.touches[0].clientY);
 
-        // Update coordinate display
-        coordsEl.textContent = `(${x}, ${y})`;
+        const x = Math.round(clientX - rect.left);
+        const y = Math.round(clientY - rect.top);
+        
+        const constrainedX = Math.max(15, Math.min(x, rect.width - 15));
+        const constrainedY = Math.max(15, Math.min(y, rect.height - 15));
 
-        // Send location update
+        coordsEl.textContent = `(${constrainedX}, ${constrainedY})`;
+
         socket.emit('updateLocation', {
           roomId: currentUser.roomId,
           userId: currentUser.id,
           username: currentUser.username,
-          x: x,
-          y: y,
+          x: constrainedX,
+          y: constrainedY,
         });
       }
 
-      // Fix: Add continuous movement (drag)
       map.addEventListener('mousedown', (e) => {
         isDragging = true;
         handleMove(e);
       });
       map.addEventListener('mousemove', (e) => {
-        coordsEl.textContent = `(${(e.clientX - map.getBoundingClientRect().left).toFixed(0)}, ${(e.clientY - map.getBoundingClientRect().top).toFixed(0)})`;
         if (isDragging) {
           handleMove(e);
+        } else {
+           const rect = map.getBoundingClientRect();
+           const x = Math.round(e.clientX - rect.left);
+           const y = Math.round(e.clientY - rect.top);
+           coordsEl.textContent = `(${x}, ${y})`;
         }
       });
       map.addEventListener('mouseup', () => (isDragging = false));
       map.addEventListener('mouseleave', () => (isDragging = false));
 
-      // Support for mobile touch
       map.addEventListener('touchstart', (e) => {
-         e.preventDefault();
-         isDragging = true;
-         handleMove(e);
-      });
+        isDragging = true;
+        handleMove(e);
+      }, { passive: false });
       map.addEventListener('touchmove', (e) => {
-         e.preventDefault();
          if (isDragging) {
             handleMove(e);
          }
-      });
+      }, { passive: false });
       map.addEventListener('touchend', () => (isDragging = false));
+      map.addEventListener('touchcancel', () => (isDragging = false));
 
-
-      // Simple hash function to get a color for a user ID
       function getColorForUser(userId) {
         let hash = 0;
         for (let i = 0; i < userId.length; i++) {
@@ -381,3 +411,15 @@
     </script>
   </body>
 </html>
+
+<!-- Since you've been developing and restarting the server, Redis might hold onto "ghost users" (users from previous sessions who never disconnected properly). These ghost users might be sitting at coordinates `(0,0)` or `(12,12)`, blocking your movement.
+
+**Flush Redis** (Clear old data):
+```bash
+# In your terminal
+redis-cli FLUSHDB
+```
+
+**Now, restart your NestJS server:**
+```bash
+npm run start:dev -->

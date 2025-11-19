@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
+import { ScheduleModule } from '@nestjs/schedule';
 import { RoomsModule } from './rooms/rooms.module';
 
 @Module({
@@ -16,6 +17,8 @@ import { RoomsModule } from './rooms/rooms.module';
       }),
       inject: [ConfigService],
     }),
+    // Initialize Scheduler for Cron Jobs
+    ScheduleModule.forRoot(),
     RoomsModule,
   ],
 })
