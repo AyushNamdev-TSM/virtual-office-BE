@@ -3,13 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Real-Time Location Tracking</title>
-    <!-- 1. Load Socket.IO from CDN for reliability -->
+    <title>Metaverse Office: Spatial Audio</title>
+    <!-- Load Socket.IO from CDN -->
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <style>
+      /* --- GLOBAL STYLES --- */
       body {
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-          Helvetica, Arial, sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
         display: grid;
         grid-template-columns: 300px 1fr;
         gap: 20px;
@@ -19,129 +19,194 @@
         margin: 0;
         overflow: hidden;
       }
+
+      /* --- SIDEBAR --- */
       .sidebar {
         background: #fff;
-        border-radius: 8px;
+        border-radius: 12px;
         padding: 20px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
         display: flex;
         flex-direction: column;
         z-index: 10;
       }
+      .sidebar h2 { margin-top: 0; font-size: 20px; color: #333; }
+      #connectionStatus {
+        padding: 10px; border-radius: 8px; margin-bottom: 20px;
+        text-align: center; font-weight: bold; font-size: 14px;
+      }
+      .disconnected { background-color: #ffeeba; color: #856404; }
+      .connected { background-color: #d4edda; color: #155724; }
+
+      .form-group { margin-bottom: 15px; }
+      label { display: block; font-weight: 600; margin-bottom: 5px; font-size: 13px; color: #555; }
+      input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
+      button#connectBtn {
+        width: 100%; padding: 12px; border: none; border-radius: 6px;
+        background-color: #007bff; color: white; font-weight: 600; cursor: pointer;
+        transition: background 0.2s;
+      }
+      button#connectBtn:hover { background-color: #0056b3; }
+      button:disabled { background-color: #ccc; cursor: not-allowed; }
+
+      #usersList { margin-top: 20px; flex-grow: 1; overflow-y: auto; }
+      .user-item {
+        padding: 10px; background: #f8f9fa; border-radius: 6px;
+        margin-bottom: 8px; font-size: 13px; border-left: 4px solid #ddd;
+        display: flex; justify-content: space-between; align-items: center;
+      }
+
+      /* --- MAP AREA --- */
       .map-container {
         background: #fff;
-        border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        border-radius: 12px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
         position: relative;
         overflow: hidden;
       }
       #map {
-        width: 100%;
-        height: 100%;
-        background: #e9ecef;
+        width: 100%; height: 100%;
+        background: #e9ecef; /* Light gray floor */
+        background-image: radial-gradient(#ced4da 1px, transparent 1px);
+        background-size: 20px 20px; /* Grid pattern */
         position: relative;
         cursor: crosshair;
-        overflow: hidden;
       }
+
+      /* --- USER MARKERS --- */
       .user-marker {
         position: absolute;
-        width: 30px;
-        height: 30px;
+        width: 32px; height: 32px;
         border-radius: 50%;
-        border: 2px solid white;
-        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+        border: 3px solid white;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
         transform: translate(-50%, -50%);
-        transition: left 0.1s linear, top 0.1s linear;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 12px;
-        font-weight: bold;
-        color: white;
+        /* Smooth movement */
+        transition: left 0.1s linear, top 0.1s linear, border-color 0.2s;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 12px; font-weight: bold; color: white;
         z-index: 5;
       }
       .user-marker::after {
         content: attr(data-username);
-        position: absolute;
-        top: 34px;
-        font-size: 11px;
-        background: rgba(0, 0, 0, 0.8);
-        color: white;
-        padding: 2px 6px;
-        border-radius: 4px;
-        white-space: nowrap;
-        pointer-events: none;
+        position: absolute; top: 36px;
+        font-size: 11px; background: rgba(0, 0, 0, 0.8);
+        color: white; padding: 4px 8px; border-radius: 4px;
+        white-space: nowrap; pointer-events: none;
       }
-      .collision {
-        border-color: red !important;
-        animation: shake 0.3s;
-      }
+      /* Collision Feedback */
+      .collision { border-color: #dc3545 !important; animation: shake 0.3s; }
       @keyframes shake {
         0%, 100% { transform: translate(-50%, -50%); }
         25% { transform: translate(-55%, -50%); }
         75% { transform: translate(-45%, -50%); }
       }
-      .form-group { margin-bottom: 15px; }
-      label { display: block; font-weight: 600; margin-bottom: 5px; font-size: 14px; }
-      input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
-      button { width: 100%; padding: 10px; border: none; border-radius: 6px; color: white; background-color: #007bff; cursor: pointer; font-weight: 600; transition: background 0.2s; }
-      button:hover { background-color: #0056b3; }
-      button:disabled { background-color: #ccc; cursor: not-allowed; }
-      #connectionStatus { padding: 10px; border-radius: 6px; margin-bottom: 20px; text-align: center; font-weight: bold; }
-      .disconnected { background-color: #ffeeba; color: #856404; }
-      .connected { background-color: #d4edda; color: #155724; }
-      #usersList { margin-top: 20px; flex-grow: 1; overflow-y: auto; }
-      .user-item { padding: 8px; background: #f8f9fa; border-radius: 4px; margin-bottom: 5px; font-size: 13px; border-left: 3px solid #ddd; }
-      #coordinates { position: absolute; bottom: 15px; left: 15px; background: rgba(0, 0, 0, 0.6); color: white; padding: 5px 10px; border-radius: 4px; font-size: 12px; pointer-events: none; z-index: 20; }
 
-      /* --- PHASE 3, 4, 5, 6 UI Elements --- */
-      #proximityModal, #incomingCallModal {
-        position: absolute; background: white; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); padding: 15px; display: none; z-index: 1000; animation: slideUp 0.3s ease-out;
+      #coordinates {
+        position: absolute; bottom: 15px; left: 15px;
+        background: rgba(0, 0, 0, 0.6); color: white;
+        padding: 6px 12px; border-radius: 20px; font-size: 12px;
+        pointer-events: none; z-index: 20;
       }
-      #proximityModal { bottom: 20px; right: 20px; width: 280px; }
-      #incomingCallModal { top: 30px; left: 50%; transform: translateX(-50%); width: 320px; background: #343a40; color: white; z-index: 2000; text-align: center; animation: slideDown 0.3s ease-out; }
-      
-      @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-      @keyframes slideDown { from { transform: translate(-50%, -50px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
 
-      .modal-header { font-weight: bold; font-size: 14px; margin-bottom: 10px; display: flex; justify-content: space-between; }
-      .nearby-card { display: flex; align-items: center; padding: 10px; background: #f1f3f5; border-radius: 8px; margin-bottom: 8px; }
-      .nearby-avatar { width: 32px; height: 32px; background: #dee2e6; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #495057; margin-right: 10px; }
+      /* --- MODALS (Proximity & Call) --- */
+      #proximityModal {
+        position: absolute; bottom: 20px; right: 20px;
+        width: 280px; background: white; border-radius: 12px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.2); padding: 15px;
+        display: none; z-index: 1000;
+        animation: slideUp 0.3s ease-out;
+      }
+      @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+      .modal-header { font-weight: bold; font-size: 14px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+      .nearby-card {
+        display: flex; align-items: center; padding: 10px;
+        background: #f8f9fa; border-radius: 8px; margin-bottom: 8px; border: 1px solid #eee;
+      }
+      .nearby-avatar {
+        width: 32px; height: 32px; background: #e9ecef; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-weight: bold; color: #555; margin-right: 10px; font-size: 12px;
+      }
       .nearby-info { flex-grow: 1; }
-      .connect-btn { padding: 5px 10px; font-size: 12px; background: #28a745; width: auto; color: white; border: none; border-radius: 4px; cursor: pointer; }
+      .nearby-name { font-size: 13px; font-weight: 600; color: #333; }
+      .nearby-dist { font-size: 11px; color: #888; }
+      .connect-btn {
+        padding: 6px 12px; font-size: 11px; background: #28a745;
+        color: white; border: none; border-radius: 20px; cursor: pointer;
+      }
       .connect-btn:hover { background: #218838; }
 
-      .caller-avatar { width: 64px; height: 64px; background: rgba(255,255,255,0.2); border-radius: 50%; margin: 0 auto 15px; display: flex; align-items: center; justify-content: center; font-size: 24px; }
-      .call-actions { display: flex; gap: 10px; margin-top: 20px; }
-      .btn-accept { background: #28a745; flex: 1; }
-      .btn-reject { background: #dc3545; flex: 1; }
-
-      /* --- Active Call Overlay --- */
-      #activeCallOverlay {
-        position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95);
-        display: none; z-index: 3000; flex-direction: column; justify-content: center; align-items: center; color: white;
+      #incomingCallModal {
+        position: absolute; top: 30px; left: 50%; transform: translateX(-50%);
+        width: 320px; background: #2c3e50; color: white;
+        border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+        padding: 25px; display: none; z-index: 2000; text-align: center;
+        animation: slideDown 0.3s ease-out;
       }
-      .video-wrapper { position: relative; width: 80%; height: 70%; display: flex; justify-content: center; align-items: center; background: #000; border-radius: 12px; overflow: hidden; }
+      @keyframes slideDown { from { transform: translate(-50%, -50px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+      
+      .caller-avatar {
+        width: 70px; height: 70px; background: rgba(255,255,255,0.15);
+        border-radius: 50%; margin: 0 auto 15px;
+        display: flex; align-items: center; justify-content: center; font-size: 30px;
+      }
+      .call-actions { display: flex; gap: 15px; margin-top: 20px; }
+      .btn-action { flex: 1; padding: 10px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+      .btn-accept { background: #2ecc71; color: white; } .btn-accept:hover { background: #27ae60; }
+      .btn-reject { background: #e74c3c; color: white; } .btn-reject:hover { background: #c0392b; }
+
+      /* --- ACTIVE VIDEO OVERLAY --- */
+      #activeCallOverlay {
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.95); display: none; z-index: 3000;
+        flex-direction: column; justify-content: center; align-items: center; color: white;
+      }
+      .video-wrapper {
+        position: relative; width: 80%; height: 70%;
+        display: flex; justify-content: center; align-items: center;
+        background: #000; border-radius: 12px; overflow: hidden; border: 1px solid #333;
+      }
       #remoteVideo { width: 100%; height: 100%; object-fit: cover; }
-      #localVideo { position: absolute; bottom: 20px; right: 20px; width: 200px; height: 150px; background: #222; border-radius: 8px; border: 2px solid white; object-fit: cover; z-index: 3001; transition: all 0.3s ease; }
+      #localVideo {
+        position: absolute; bottom: 20px; right: 20px;
+        width: 200px; height: 150px; background: #222;
+        border-radius: 8px; border: 2px solid white; object-fit: cover;
+        z-index: 3001; transition: transform 0.3s ease;
+      }
       #localVideo:hover { transform: scale(1.05); }
 
-      /* Phase 7 & 8: Controls */
+      /* Controls Bar */
       .controls-bar {
-        display: flex; gap: 15px; margin-top: 20px; padding: 15px 25px; background: rgba(255,255,255,0.1); border-radius: 50px; backdrop-filter: blur(10px);
+        display: flex; gap: 15px; margin-top: 20px; padding: 15px 30px;
+        background: rgba(255,255,255,0.1); border-radius: 50px; backdrop-filter: blur(10px);
       }
       .control-btn {
-        width: 50px; height: 50px; border-radius: 50%; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; background: #343a40; color: white;
+        width: 50px; height: 50px; border-radius: 50%; border: none;
+        display: flex; align-items: center; justify-content: center;
+        cursor: pointer; transition: all 0.2s; background: #343a40; color: white;
       }
       .control-btn svg { width: 24px; height: 24px; fill: currentColor; }
       .control-btn:hover { background: #495057; transform: translateY(-2px); }
       .control-btn.off { background: #dc3545; color: white; }
       .control-btn.active-share { background: #007bff; }
-      .btn-hangup { background: #dc3545; margin-left: 10px; }
+      .btn-hangup { background: #dc3545; margin-left: 15px; }
       .btn-hangup:hover { background: #c82333; }
+
+      /* Spatial Audio Volume Slider */
+      #volumeControl {
+        position: absolute; top: 20px; right: 20px;
+        background: rgba(0,0,0,0.6); padding: 10px 15px;
+        border-radius: 30px; display: flex; align-items: center; gap: 10px;
+        z-index: 3002; backdrop-filter: blur(4px);
+      }
+      #volumeControl span { color: white; font-size: 12px; font-weight: 600; min-width: 50px; }
+      #volumeControl input[type=range] { width: 100px; height: 4px; accent-color: #28a745; cursor: pointer; }
     </style>
   </head>
   <body>
+    <!-- Sidebar -->
     <div class="sidebar">
       <h2>📍 Metaverse Office</h2>
       <div id="connectionStatus" class="disconnected">Disconnected</div>
@@ -158,16 +223,17 @@
       <button id="connectBtn" onclick="connectToRoom()">Join Room</button>
       
       <div id="usersList">
-        <h3 style="font-size: 14px; color: #666;">Active Users</h3>
+        <h3 style="font-size: 14px; color: #666; margin-bottom: 10px;">Active Users</h3>
         <div id="userListContainer"></div>
       </div>
     </div>
 
+    <!-- Map & Overlays -->
     <div class="map-container">
       <div id="map"></div>
       <div id="coordinates">(0, 0)</div>
 
-      <!-- Phase 3: Proximity Alert -->
+      <!-- Phase 3: Proximity List -->
       <div id="proximityModal">
         <div class="modal-header">
           <span>👋 People Nearby</span>
@@ -176,27 +242,34 @@
         <div id="nearbyList"></div>
       </div>
 
-      <!-- Phase 4: Incoming Call Modal -->
+      <!-- Phase 4: Incoming Call -->
       <div id="incomingCallModal">
         <div class="caller-avatar" id="callerAvatar">?</div>
         <h3 id="callerName">Unknown</h3>
-        <p>is requesting a video call...</p>
+        <p style="margin-bottom:20px; font-size:14px; color:#ccc;">is requesting a video call...</p>
         <div class="call-actions">
-          <button class="btn-reject" onclick="rejectCall()">Decline</button>
-          <button class="btn-accept" onclick="acceptCall()">Accept</button>
+          <button class="btn-action btn-reject" onclick="rejectCall()">Decline</button>
+          <button class="btn-action btn-accept" onclick="acceptCall()">Accept</button>
         </div>
       </div>
 
-      <!-- Phase 5, 6, 7, 8: Active Video Call -->
+      <!-- Phase 5-9: Active Video & Spatial Audio -->
       <div id="activeCallOverlay">
-        <h2>📞 Connected to <span id="remoteUserName">...</span></h2>
+        <div id="volumeControl">
+            <span id="volumeLabel">🔊 100%</span>
+            <input type="range" id="volumeSlider" min="0" max="200" value="100" oninput="updateVolume(this.value)" title="Spatial Volume Boost">
+        </div>
+
+        <h2>📞 Call with <span id="remoteUserName">...</span></h2>
+        
         <div class="video-wrapper">
             <video id="remoteVideo" autoplay playsinline></video>
             <video id="localVideo" autoplay playsinline muted></video>
         </div>
-        <!-- Phase 7 & 8 Controls -->
+        
+        <!-- Media Controls -->
         <div class="controls-bar">
-            <button id="btnMic" class="control-btn" onclick="toggleMic()" title="Toggle Microphone">
+            <button id="btnMic" class="control-btn" onclick="toggleMic()" title="Toggle Mic">
                 <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
             </button>
             <button id="btnCam" class="control-btn" onclick="toggleCam()" title="Toggle Camera">
@@ -213,6 +286,7 @@
     </div>
 
     <script>
+      // --- GLOBAL STATE ---
       let socket = null;
       let currentUser = null;
       let userMarkers = new Map(); 
@@ -220,16 +294,22 @@
       let currentIncomingCallerId = null;
       let isDragging = false;
       
+      // --- MEDIA STATE ---
       let peerConnection = null;
       let localStream = null;
       let remoteCallUserId = null;
-      const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
-
       let isMicOn = true;
       let isCamOn = true;
       let isScreenSharing = false;
       let originalVideoTrack = null;
+      let audioContext = null;
+      let gainNode = null;
+      let masterVolume = 1.0;
+      let currentSpatialGain = 1.0;
 
+      const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+      
+      // --- DOM ELEMENTS ---
       const map = document.getElementById('map');
       const coordsEl = document.getElementById('coordinates');
       const userListContainer = document.getElementById('userListContainer');
@@ -246,10 +326,13 @@
       const btnMic = document.getElementById('btnMic');
       const btnCam = document.getElementById('btnCam');
       const btnShare = document.getElementById('btnShare');
+      const volumeControl = document.getElementById('volumeControl');
+      const volumeLabel = document.getElementById('volumeLabel');
 
-      // Pre-fill random name
+      // Pre-fill
       document.getElementById('username').value = `User${Math.floor(Math.random() * 1000)}`;
 
+      // --- SETUP ---
       function setStatus(msg, connected) {
         const el = document.getElementById('connectionStatus');
         el.textContent = msg;
@@ -263,15 +346,10 @@
         const username = document.getElementById('username').value.trim();
         const roomId = document.getElementById('roomId').value.trim();
         
-        if (!username || !roomId) return alert('Enter name and room ID');
+        if (!username || !roomId) return alert('Enter details');
+        if (typeof io === 'undefined') return alert('Socket.IO not loaded');
 
         currentUser = { userId: `user-${Date.now()}`, username, roomId };
-        
-        if (typeof io === 'undefined') {
-            alert('Socket.io library not loaded. Please refresh or check connection.');
-            return;
-        }
-
         socket = io('http://localhost:3001', { transports: ['websocket', 'polling'] });
 
         socket.on('connect', () => {
@@ -279,6 +357,7 @@
           socket.emit('joinRoom', { ...currentUser });
         });
 
+        // Room State
         socket.on('roomJoined', (data) => {
           setStatus(`Connected: ${roomId}`, true);
           userListContainer.innerHTML = '';
@@ -286,6 +365,14 @@
              data.locations.forEach(loc => renderUserMarker(loc));
           }
           sendInitialLocation();
+
+          // Setup Disconnect Logic on Page Unload (FIX for Ghost Users)
+          window.addEventListener('beforeunload', () => {
+             if(socket) {
+                 socket.emit('leaveRoom', { roomId: currentUser.roomId });
+                 socket.disconnect();
+             }
+          });
         });
 
         socket.on('userJoined', (data) => {
@@ -293,8 +380,13 @@
            addUserToList(data);
         });
         
+        // Location Updates (Server Authority)
         socket.on('locationUpdate', (data) => {
-           renderUserMarker(data);
+            renderUserMarker(data);
+            // Phase 9: Update Spatial Audio if calling this user
+            if (remoteCallUserId && data.userId === remoteCallUserId) {
+                updateSpatialAudio(data.x, data.y);
+            }
         });
         
         socket.on('userLeft', (data) => {
@@ -302,10 +394,11 @@
           if(marker) marker.remove();
           userMarkers.delete(data.userId);
           handleProximityClear([data.userId]);
-          const item = document.querySelector(`[data-userid="${data.userId}"]`);
-          if(item) item.remove();
+          const el = document.querySelector(`[data-userid="${data.userId}"]`);
+          if(el) el.remove();
         });
 
+        // Collision Feedback
         socket.on('movementRejected', (data) => {
           const marker = userMarkers.get(currentUser.userId);
           if (marker) {
@@ -314,6 +407,7 @@
           }
         });
 
+        // Proximity Radar
         socket.on('proximity-alert', (data) => {
           data.users.forEach(u => {
             nearbyUsersMap.set(u.userId, u);
@@ -325,6 +419,7 @@
 
         socket.on('proximity-clear', (data) => handleProximityClear(data.userIds));
 
+        // Calling
         socket.on('incoming-call', (data) => {
           console.log('Incoming Call:', data);
           currentIncomingCallerId = data.callerId;
@@ -333,9 +428,7 @@
           incomingCallModal.style.display = 'block';
         });
 
-        socket.on('call-sent', () => {
-            alert('Calling... Waiting for response.');
-        });
+        socket.on('call-sent', () => alert('Calling... Waiting for response.'));
 
         socket.on('call-ready', (data) => {
           console.log('Call Started!');
@@ -352,6 +445,7 @@
             cleanupCallState();
         });
 
+        // WebRTC Signals
         socket.on('webrtc-offer', async (data) => {
           if (!peerConnection) return;
           await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
@@ -361,24 +455,105 @@
         });
 
         socket.on('webrtc-answer', async (data) => {
-          if (!peerConnection) return;
-          await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+          if (peerConnection) await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
         });
 
         socket.on('webrtc-ice-candidate', async (data) => {
-          if (!peerConnection) return;
-          try { await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate)); } 
-          catch (e) { console.error(e); }
+          if (peerConnection) try { await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate)); } catch (e) {}
         });
       }
 
-      // --- PHASE 7: MEDIA CONTROLS ---
+      // --- PHASE 9: SPATIAL AUDIO & VOLUME ---
+      function setupAudioContext(stream) {
+        try {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            audioContext = new AudioContext();
+            const source = audioContext.createMediaStreamSource(stream);
+            gainNode = audioContext.createGain();
+            
+            // Source -> GainNode -> Destination (Speakers)
+            source.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            // Resume AudioContext if state is suspended
+            if (audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+
+            // Initialize volume
+            applyVolume();
+            console.log("🔊 Spatial Audio Initialized");
+        } catch (e) {
+            console.error("Web Audio API Error:", e);
+        }
+      }
+
+      function updateSpatialAudio(remoteX, remoteY) {
+        if (!currentUser) return;
+        const m = userMarkers.get(currentUser.userId);
+        if (!m) return;
+        
+        const myX = parseFloat(m.style.left);
+        const myY = parseFloat(m.style.top);
+        
+        const dist = Math.sqrt(Math.pow(myX - remoteX, 2) + Math.pow(myY - remoteY, 2));
+        
+        // 0-300px Range
+        let volume = 1 - (dist / 300);
+        if (volume < 0) volume = 0;
+        
+        currentSpatialGain = volume;
+        applyVolume();
+      }
+
+      function updateVolume(val) { masterVolume = val / 100; applyVolume(); }
+      function applyVolume() {
+          const final = currentSpatialGain * masterVolume;
+          if (gainNode) gainNode.gain.value = final;
+          volumeLabel.textContent = `🔊 ${(final * 100).toFixed(0)}%`;
+      }
+
+      // --- WEBRTC SETUP ---
+      async function startWebRTC(isInitiator) {
+        try {
+          localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+          localVideo.srcObject = localStream;
+
+          peerConnection = new RTCPeerConnection(rtcConfig);
+          localStream.getTracks().forEach(t => peerConnection.addTrack(t, localStream));
+
+          peerConnection.onicecandidate = (e) => {
+            if (e.candidate) socket.emit('webrtc-ice-candidate', { toUserId: remoteCallUserId, signal: e.candidate });
+          };
+
+          peerConnection.ontrack = (e) => {
+            remoteVideo.srcObject = e.streams[0];
+            if (e.streams[0].getAudioTracks().length > 0) {
+               setupAudioContext(e.streams[0]);
+               // Mute raw video element audio to avoid echo/double audio
+               remoteVideo.muted = true;
+            }
+          };
+
+          if (isInitiator) {
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+            socket.emit('webrtc-offer', { toUserId: remoteCallUserId, signal: offer });
+          }
+        } catch (err) {
+          console.error(err);
+          alert('Camera error: ' + err.message);
+          cleanupCallState();
+        }
+      }
+
+      // --- MEDIA CONTROLS ---
       function toggleMic() {
         if (localStream) {
-            const audioTrack = localStream.getAudioTracks()[0];
-            if (audioTrack) {
+            const track = localStream.getAudioTracks()[0];
+            if (track) {
                 isMicOn = !isMicOn;
-                audioTrack.enabled = isMicOn;
+                track.enabled = isMicOn;
                 btnMic.classList.toggle('off', !isMicOn);
             }
         }
@@ -386,68 +561,37 @@
 
       function toggleCam() {
         if (localStream) {
-            const videoTrack = localStream.getVideoTracks()[0];
-            if (videoTrack) {
+            const track = localStream.getVideoTracks()[0];
+            if (track) {
                 isCamOn = !isCamOn;
-                videoTrack.enabled = isCamOn;
+                track.enabled = isCamOn;
                 btnCam.classList.toggle('off', !isCamOn);
             }
         }
       }
-
-      // --- PHASE 8: SCREEN SHARING ---
+      
       async function toggleScreenShare() {
-        if (isScreenSharing) {
-            stopScreenShare();
-        } else {
-            startScreenShare();
-        }
+        if (isScreenSharing) stopScreenShare(); else startScreenShare();
       }
 
       async function startScreenShare() {
         try {
-            const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-            const screenTrack = screenStream.getVideoTracks()[0];
-            
-            // Save camera track to revert later
+            const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+            const track = stream.getVideoTracks()[0];
             originalVideoTrack = localStream.getVideoTracks()[0];
-            
-            // Replace track in PeerConnection
             const sender = peerConnection.getSenders().find(s => s.track.kind === 'video');
-            if (sender) {
-                await sender.replaceTrack(screenTrack);
-            }
-
-            // Show screen in local view
-            localVideo.srcObject = screenStream;
-            
-            // Update UI state
-            isScreenSharing = true;
-            btnShare.classList.add('active-share');
-
-            // Handle system "Stop sharing" button
-            screenTrack.onended = () => stopScreenShare();
-
-        } catch (err) {
-            console.error("Error sharing screen:", err);
-        }
+            if(sender) await sender.replaceTrack(track);
+            localVideo.srcObject = stream;
+            isScreenSharing = true; btnShare.classList.add('active-share');
+            track.onended = () => stopScreenShare();
+        } catch(e){}
       }
 
       async function stopScreenShare() {
-        if (!isScreenSharing) return;
-
-        // Revert to camera track
         const sender = peerConnection.getSenders().find(s => s.track.kind === 'video');
-        if (sender && originalVideoTrack) {
-            await sender.replaceTrack(originalVideoTrack);
-        }
-
-        // Restore local view
+        if(sender && originalVideoTrack) await sender.replaceTrack(originalVideoTrack);
         localVideo.srcObject = localStream;
-
-        // Stop screen track
-        isScreenSharing = false;
-        btnShare.classList.remove('active-share');
+        isScreenSharing = false; btnShare.classList.remove('active-share');
       }
 
       // --- UI HELPERS ---
@@ -458,8 +602,8 @@
         if (!marker) {
           marker = document.createElement('div');
           marker.className = 'user-marker';
-          marker.textContent = data.username ? data.username[0].toUpperCase() : '?';
-          marker.dataset.username = data.username;
+          marker.textContent = data.username[0].toUpperCase();
+          marker.setAttribute('data-username', data.username);
           map.appendChild(marker);
           userMarkers.set(data.userId, marker);
           addUserToList(data);
@@ -480,7 +624,7 @@
         const x = Math.floor(Math.random() * 400) + 50;
         const y = Math.floor(Math.random() * 300) + 50;
         const payload = { ...currentUser, x, y };
-        renderUserMarker(payload);
+        // Note: Removed optimistic renderUserMarker(payload) to enforce collision logic
         socket.emit('updateLocation', payload);
       }
 
@@ -503,7 +647,7 @@
         document.getElementById('nearbyCount').textContent = users.length;
         nearbyList.innerHTML = users.map(u => `
           <div class="nearby-card">
-            <div class="nearby-avatar">${u.username[0]}</div>
+            <div class="nearby-avatar">${u.username[0].toUpperCase()}</div>
             <div class="nearby-info">
               <div style="font-weight:600">${u.username}</div>
               <div style="font-size:11px; color:#666">${u.distance}px away</div>
@@ -513,6 +657,7 @@
         `).join('');
       }
 
+      // --- CALL ACTIONS ---
       window.initiateCall = (targetId) => {
         socket.emit('call-request', { targetUserId: targetId });
       };
@@ -535,6 +680,7 @@
 
       function cleanupCallState() {
         activeCallOverlay.style.display = 'none';
+        
         if (localStream) {
             localStream.getTracks().forEach(t => t.stop());
             localStream = null;
@@ -546,60 +692,27 @@
         remoteVideo.srcObject = null;
         localVideo.srcObject = null;
         remoteCallUserId = null;
-        
-        // Reset controls state
-        isMicOn = true;
-        isCamOn = true;
-        isScreenSharing = false;
-        btnMic.classList.remove('off');
-        btnCam.classList.remove('off');
-        btnShare.classList.remove('active-share');
 
+        // Show proximity modal again if users are still close
         if (nearbyUsersMap.size > 0) {
             proximityModal.style.display = 'block';
         }
       }
 
-      async function startWebRTC(isInitiator) {
-        try {
-          localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-          localVideo.srcObject = localStream;
-
-          peerConnection = new RTCPeerConnection(rtcConfig);
-          
-          localStream.getTracks().forEach(t => peerConnection.addTrack(t, localStream));
-
-          peerConnection.onicecandidate = (e) => {
-            if (e.candidate) socket.emit('webrtc-ice-candidate', { toUserId: remoteCallUserId, signal: e.candidate });
-          };
-
-          peerConnection.ontrack = (e) => {
-            remoteVideo.srcObject = e.streams[0];
-          };
-
-          if (isInitiator) {
-            const offer = await peerConnection.createOffer();
-            await peerConnection.setLocalDescription(offer);
-            socket.emit('webrtc-offer', { toUserId: remoteCallUserId, signal: offer });
-          }
-        } catch (err) {
-          console.error(err);
-          alert('Camera error: ' + err.message);
-          cleanupCallState();
-        }
-      }
-
       function addUserToList(u) {
-        if (!u || !u.userId) return;
         if (document.querySelector(`[data-userid="${u.userId}"]`)) return;
-        
         const el = document.createElement('div');
         el.className = 'user-item';
         el.dataset.id = u.userId;
-        el.textContent = `${u.username} (ID: ${u.userId.slice(-4)})`;
+        el.textContent = `${u.username} (${u.userId.slice(-4)})`;
         el.style.borderLeft = `4px solid ${getColor(u.userId)}`;
         el.setAttribute('data-userid', u.userId);
         userListContainer.appendChild(el);
+      }
+
+      function removeUserFromList(id) {
+        const el = document.querySelector(`[data-userid="${id}"]`);
+        if (el) el.remove();
       }
 
       function getColor(id) {
@@ -609,6 +722,7 @@
         return `hsl(${hash % 360}, 70%, 50%)`;
       }
 
+      // --- MAP INTERACTION ---
       const handleMove = (e) => {
         if (!socket || !currentUser) return;
         e.preventDefault();
@@ -627,6 +741,7 @@
         if (isDragging || e.type === 'click') {
           const payload = { ...currentUser, x, y };
           socket.emit('updateLocation', payload);
+          // removed optimistic renderUserMarker(payload)
         }
       };
 

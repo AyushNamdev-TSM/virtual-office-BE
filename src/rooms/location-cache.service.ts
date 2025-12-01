@@ -1,4 +1,4 @@
-import { Injectable, Inject, Logger } from '@nestjs/common';
+import { Injectable, Inject, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import Redis from 'ioredis';
 import { Server } from 'socket.io';
@@ -6,15 +6,15 @@ import { UpdateLocationDto } from './dto/update-location.dto';
 import { RoomsService } from './rooms.service';
 
 @Injectable()
-export class LocationCacheService {
+export class LocationCacheService implements OnModuleInit {
   private readonly logger = new Logger(LocationCacheService.name);
   private readonly LOCATIONS_KEY = 'user:locations';
   private readonly DIRTY_SET_KEY = 'users:dirty';
   private readonly COLLISION_RADIUS = 60;
   private readonly PROXIMITY_RADIUS = 150;
   
-  // Garbage Collection: Remove users inactive for 30s
-  private readonly STALE_USER_THRESHOLD_MS = 30000; 
+  // REMOVED: STALE_USER_THRESHOLD_MS logic as requested.
+  // Users will strictly persist until disconnect or server restart.
 
   private server: Server;
 
@@ -22,6 +22,12 @@ export class LocationCacheService {
     @Inject('REDIS_CLIENT') private readonly redis: Redis,
     private readonly roomsService: RoomsService,
   ) {}
+
+  // Keeps the DB clean on server restarts (Solves the "3 hours back" ghost user issue)
+  async onModuleInit() {
+    this.logger.warn('🧹 Startup: Flushing Redis to remove old ghosts...');
+    await this.redis.flushdb();
+  }
 
   setServer(server: Server) {
     this.server = server;
@@ -36,6 +42,7 @@ export class LocationCacheService {
     await this.redis.srem(`room:${roomId}:users`, userId);
     const count = await this.redis.scard(`room:${roomId}:users`);
     if (count === 0) await this.redis.srem('active_rooms', roomId);
+    
     await this.redis.del(`user:${userId}:neighbors`);
     await this.redis.hdel(this.LOCATIONS_KEY, userId);
   }
@@ -70,48 +77,36 @@ export class LocationCacheService {
     await this.redis.sadd(this.DIRTY_SET_KEY, data.userId);
   }
 
-  @Cron('*/1 * * * * *')
+  // --- The Radar ---
+  @Cron('*/1 * * * * *') // Runs every 1 second
   async processProximityChecks() {
     if (!this.server) return;
 
     const activeRooms = await this.redis.smembers('active_rooms');
-    const now = Date.now();
+    // const now = Date.now(); // Time check removed
 
     for (const roomId of activeRooms) {
       const userIds = await this.redis.smembers(`room:${roomId}:users`);
-      if (userIds.length === 0) continue;
+      
+      if (userIds.length === 0) {
+          await this.redis.srem('active_rooms', roomId);
+          continue;
+      }
 
       const rawData = await this.redis.hmget(this.LOCATIONS_KEY, ...userIds);
       
-      // Explicitly typed arrays to fix TS errors
       const users: any[] = [];
-      const staleUsers: string[] = [];
 
-      // 1. Filter Stale vs Active
+      // 1. Parse Users (No Stale Check)
       userIds.forEach((userId, index) => {
         const raw = rawData[index];
-        if (!raw) return;
+        if (!raw) return; // Skip if data is missing/corrupt
 
         const user = JSON.parse(raw);
-        const lastUpdate = new Date(user.timestamp).getTime();
-
-        if (now - lastUpdate > this.STALE_USER_THRESHOLD_MS) {
-            staleUsers.push(userId);
-        } else {
-            users.push(user);
-        }
+        users.push(user);
       });
 
-      // 2. Cleanup Stale Users
-      if (staleUsers.length > 0) {
-        // this.logger.log(`🧹 Removing ${staleUsers.length} stale users from room ${roomId}`);
-        for (const staleId of staleUsers) {
-            await this.removeRoomUser(roomId, staleId);
-            this.server.to(roomId).emit('userLeft', { userId: staleId });
-        }
-      }
-
-      // 3. Process Proximity
+      // 2. Proximity Logic
       if (users.length < 2) continue;
 
       for (let i = 0; i < users.length; i++) {
@@ -195,7 +190,6 @@ export class LocationCacheService {
 
     const rawLocations = await this.redis.hmget(this.LOCATIONS_KEY, ...dirtyUsers);
     
-    // Type guard to fix TS error
     const updates = rawLocations
       .filter((raw): raw is string => raw !== null)
       .map((raw) => JSON.parse(raw));
