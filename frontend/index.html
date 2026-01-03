@@ -186,6 +186,7 @@
       <div id="map"></div>
       <div id="coordinates">(0, 0)</div>
     </div>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 
     <script>
       const statusEl = document.getElementById('connectionStatus');
@@ -227,7 +228,7 @@
           roomId: roomId,
         };
 
-        socket = io('http://localhost:3001', {
+        socket = io('http://localhost:3000', {
           transports: ['websocket', 'polling'],
         });
 

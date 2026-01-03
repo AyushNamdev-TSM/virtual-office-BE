@@ -18,14 +18,14 @@ export class RoomsService {
     const room = await this.roomModel.findOneAndUpdate(
       { roomId },
       {
-        $setOnInsert: { name: `Room ${roomId}` }, 
-        $addToSet: { activeUsers: userId }, 
+        $setOnInsert: { name: `Room ${roomId}` },
+        $addToSet: { activeUsers: userId },
       },
       { upsert: true, new: true },
     );
-    
+
     if (room) {
-        this.logger.log(`User ${userId} added to room ${roomId} (DB)`);
+      this.logger.log(`User ${userId} added to room ${roomId} (DB)`);
     }
     return room;
   }
@@ -83,18 +83,22 @@ export class RoomsService {
 
     try {
       const result = await this.userLocationModel.bulkWrite(operations);
-      this.logger.debug(`Bulk write success: Modified ${result.modifiedCount}, Upserted ${result.upsertedCount}`);
+      this.logger.debug(
+        `Bulk write success: Modified ${result.modifiedCount}, Upserted ${result.upsertedCount}`,
+      );
     } catch (error) {
       this.logger.error(`Bulk write failed: ${error.message}`);
       throw error;
     }
   }
-  
-  async updateUserLocation(updateData: UpdateLocationDto): Promise<UserLocation> {
+
+  async updateUserLocation(
+    updateData: UpdateLocationDto,
+  ): Promise<UserLocation> {
     return this.userLocationModel.findOneAndUpdate(
-        { userId: updateData.userId, roomId: updateData.roomId },
-        { ...updateData, timestamp: new Date() },
-        { upsert: true, new: true }
+      { userId: updateData.userId, roomId: updateData.roomId },
+      { ...updateData, timestamp: new Date() },
+      { upsert: true, new: true },
     );
   }
 }

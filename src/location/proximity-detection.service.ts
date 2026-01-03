@@ -13,7 +13,9 @@ export type ProximityEvent = {
 export class ProximityDetectionService {
   private readonly logger = new Logger(ProximityDetectionService.name);
   private readonly DEFAULT_RADIUS = Number(process.env.PROXIMITY_RADIUS || 30);
-  private readonly ALERT_COOLDOWN = Number(process.env.ALERT_COOLDOWN_MS || 10000); // 10 seconds
+  private readonly ALERT_COOLDOWN = Number(
+    process.env.ALERT_COOLDOWN_MS || 10000,
+  ); // 10 seconds
 
   // Cache to avoid repeated alerts: key "u1:u2" -> timestamp
   private activeAlerts = new Map<string, number>();
@@ -24,7 +26,11 @@ export class ProximityDetectionService {
     return Math.sqrt(dx * dx + dy * dy);
   }
 
-  detectProximities(current: Loc, others: Loc[], radius = this.DEFAULT_RADIUS): ProximityEvent[] {
+  detectProximities(
+    current: Loc,
+    others: Loc[],
+    radius = this.DEFAULT_RADIUS,
+  ): ProximityEvent[] {
     const results: ProximityEvent[] = [];
     const now = Date.now();
 
@@ -40,7 +46,10 @@ export class ProximityDetectionService {
       const last1 = this.activeAlerts.get(k1) || 0;
       const last2 = this.activeAlerts.get(k2) || 0;
 
-      if (now - last1 >= this.ALERT_COOLDOWN && now - last2 >= this.ALERT_COOLDOWN) {
+      if (
+        now - last1 >= this.ALERT_COOLDOWN &&
+        now - last2 >= this.ALERT_COOLDOWN
+      ) {
         this.activeAlerts.set(k1, now);
         this.activeAlerts.set(k2, now);
         results.push({ user1: current, user2: o, distance: d });
