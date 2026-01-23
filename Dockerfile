@@ -1,46 +1,23 @@
-# ============================================
-# Auto-generated Dockerfile by MCP Analyzer
-# Stack: TypeScript / NestJS
-# ============================================
-
-# Build stage
-FROM node:20-alpine AS builder
+FROM alpine:latest AS builder
 
 WORKDIR /app
-
-# Install dependencies for building (if needed)
-
-# Copy dependency files
-COPY package*.json ./
-
-# Install all dependencies (including dev for building)
-RUN npm ci
-
-# Copy source code
 COPY . .
 
-# Build the application
-RUN npm run build
-
-# Production stage
-FROM node:20-alpine AS production
+FROM alpine:latest
 
 WORKDIR /app
 
+RUN apk add --no-cache curl
 
-# Copy dependency files
-COPY package*.json ./
+COPY --from=builder /app /app
 
-# Install production dependencies only
-RUN npm ci --only=production
+RUN chmod +x /app/app
 
-# Copy built application from builder stage
-COPY --from=builder /app/dist ./dist
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+USER appuser
 
-# Create non-root user for security
-RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
-USER nodejs
+EXPOSE 8080
 
-EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 CMD curl -f http://localhost:8080/health || exit 1
 
-CMD ["node", "dist/main.js"]
+CMD ["/app/app"]
